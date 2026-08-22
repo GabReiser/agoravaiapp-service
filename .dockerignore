@@ -1,5 +1,9 @@
-*
-!target/*-runner
-!target/*-runner.jar
-!target/lib/*
-!target/quarkus-app/*
+target/
+.git/
+.gitignore
+.idea/
+docs/
+k8s/
+Jenkinsfile
+*.md
+docker-compose.yml

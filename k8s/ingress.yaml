@@ -1,0 +1,27 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: core-service
+  namespace: ${NAMESPACE}
+  annotations:
+    # O K3s usa o Traefik como controlador de Ingress por padrão.
+    # Se você instalou o NGINX Ingress, troque a ingressClassName abaixo para "nginx".
+    # cert-manager.io/cluster-issuer: letsencrypt-prod
+spec:
+  ingressClassName: traefik
+  rules:
+    - host: ${DOMAIN}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: core-service
+                port:
+                  number: 8082
+  # Habilite quando tiver um certificado (ex.: cert-manager) configurado:
+  # tls:
+  #   - hosts:
+  #       - ${DOMAIN}
+  #     secretName: core-service-tls

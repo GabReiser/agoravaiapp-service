@@ -1,58 +1,64 @@
-# agoravaiapp
+# agoravaiapp — Core Service (Quarkus)
 
-This project uses Quarkus, the Supersonic Subatomic Java Framework.
+Serviço principal do **Agora Vai** (lançamentos, assinaturas, dashboard,
+categorias, quick actions). Implementado em **Java 21 + Quarkus 3 + PostgreSQL**.
 
-If you want to learn more about Quarkus, please visit its website: <https://quarkus.io/>.
+## Stack
 
-## Running the application in dev mode
+- REST: Quarkus REST (RESTEasy Reactive) + Jackson
+- Persistência: Hibernate ORM + Panache + PostgreSQL 16
+- Migrações: Flyway (schema `core`)
+- Observabilidade: `/q/health`, `/q/metrics`, `/q/openapi`
+- Redis: **semi-implementado** (desabilitado por padrão via `agoravai.redis.enabled`)
+- Kafka: dependência presente (eventos de domínio — Fase 5, ainda não emitidos)
 
-You can run your application in dev mode that enables live coding using:
+## Como rodar (dev)
 
-```shell script
-./mvnw quarkus:dev
-```
+1. Suba o Postgres:
 
-> **_NOTE:_**  Quarkus now ships with a Dev UI, which is available in dev mode only at <http://localhost:8080/q/dev/>.
+   ```shell
+   docker compose up -d
+   ```
 
-## Packaging and running the application
+   Banco `agoravai_core` na porta `5434`.
 
-The application can be packaged using:
+2. Rode o app em dev mode:
 
-```shell script
+   ```shell
+   ./mvnw quarkus:dev
+   ```
+
+   O app sobe em `http://localhost:8080` e aplica as migrations automaticamente.
+
+## Identidade do usuário
+
+O gateway valida o JWT (Firebase) e injeta os headers `X-User-Id` e
+`X-User-Admin`. Em dev, sem gateway, é usado o usuário fixo `dev-user`
+(administrador), configurável em `application.properties`.
+
+> TODO (produção): validar o JWT Firebase no próprio core via `quarkus-oidc`.
+
+## Endpoints (prefixo `/api/v1`)
+
+| Método | Rota | Status |
+|---|---|---|
+| GET | `/categories` | ✅ |
+| GET/POST/DELETE | `/transactions` | ✅ |
+| GET/POST/PATCH/DELETE | `/subscriptions` | ✅ |
+| GET/POST/DELETE | `/quick-actions` | ✅ |
+| GET | `/dashboard` | ✅ |
+| GET | `/admin/metrics` | ✅ (admin) |
+| POST | `/transactions/statement/upload` | 🚧 501 |
+| POST | `/transactions/statement/{id}/confirm` | 🚧 501 |
+| POST | `/ai/insights`, `/ai/nlp/parse-transaction` | 🚧 501 |
+| GET | `/gamification/*` | 🚧 501 |
+
+Itens marcados com 🚧 são serviços ainda não criados e respondem `501` com
+"Em desenvolvimento".
+
+## Empacotar
+
+```shell
 ./mvnw package
+java -jar target/quarkus-app/quarkus-run.jar
 ```
-
-It produces the `quarkus-run.jar` file in the `target/quarkus-app/` directory.
-Be aware that it’s not an _über-jar_ as the dependencies are copied into the `target/quarkus-app/lib/` directory.
-
-The application is now runnable using `java -jar target/quarkus-app/quarkus-run.jar`.
-
-If you want to build an _über-jar_, execute the following command:
-
-```shell script
-./mvnw package -Dquarkus.package.jar.type=uber-jar
-```
-
-The application, packaged as an _über-jar_, is now runnable using `java -jar target/*-runner.jar`.
-
-## Creating a native executable
-
-You can create a native executable using:
-
-```shell script
-./mvnw package -Dnative
-```
-
-Or, if you don't have GraalVM installed, you can run the native executable build in a container using:
-
-```shell script
-./mvnw package -Dnative -Dquarkus.native.container-build=true
-```
-
-You can then execute your native executable with: `./target/agoravaiapp-1.0.0-SNAPSHOT-runner`
-
-If you want to learn more about building native executables, please consult <https://quarkus.io/guides/maven-tooling>.
-
-## Related Guides
-
-- Messaging - Kafka Connector ([guide](https://quarkus.io/guides/kafka-getting-started)): Connect to Kafka with Reactive Messaging
