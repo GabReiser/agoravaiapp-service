@@ -16,7 +16,11 @@ import jakarta.ws.rs.QueryParam;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 import java.net.URI;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
 import java.util.UUID;
+import java.util.stream.Collectors;
 import org.agoravaiapp.category.Category;
 import org.agoravaiapp.category.CategoryRepository;
 import org.agoravaiapp.common.Dates;
@@ -66,6 +70,66 @@ public class TransactionResource {
             throw new NotFoundException("Categoria nao encontrada: " + request.categoryId());
         }
 
+        Transaction transaction = persist(request, category);
+
+        return Response.created(URI.create("/api/v1/transactions/" + transaction.id))
+                .entity(TransactionDto.from(transaction))
+                .build();
+    }
+
+    /**
+     * Cria varios lancamentos numa unica requisicao ("modo planilha" e
+     * confirmacao de extrato).
+     *
+     * <p>Semantica <strong>parcial</strong>, de proposito: linhas boas sao
+     * gravadas e as ruins voltam relatadas em {@code errors}. Quem importa 80
+     * linhas de extrato e tem 2 com categoria invalida nao quer perder as 78 --
+     * quer corrigir as 2. Por isso a resposta e {@code 207 Multi-Status} quando
+     * houve qualquer recusa, e {@code 201} quando tudo entrou.</p>
+     *
+     * <p>As categorias sao carregadas de uma vez antes do laco: resolver uma por
+     * linha faria 500 SELECTs num lote grande.</p>
+     */
+    @POST
+    @Path("/bulk")
+    @Transactional
+    public Response createBulk(@Valid BulkTransactionRequest request) {
+        List<CreateTransactionRequest> items = request.transactions();
+
+        Map<UUID, Category> categories = categoryRepository
+                .list("id in ?1", items.stream().map(CreateTransactionRequest::categoryId).distinct().toList())
+                .stream()
+                .collect(Collectors.toMap(c -> c.id, c -> c));
+
+        List<TransactionDto> created = new ArrayList<>();
+        List<BulkTransactionResponse.BulkError> errors = new ArrayList<>();
+
+        for (int index = 0; index < items.size(); index++) {
+            CreateTransactionRequest item = items.get(index);
+            Category category = categories.get(item.categoryId());
+            if (category == null) {
+                errors.add(new BulkTransactionResponse.BulkError(
+                        index, "Categoria nao encontrada: " + item.categoryId()));
+                continue;
+            }
+            created.add(TransactionDto.from(persist(item, category)));
+        }
+
+        // Nenhuma linha aproveitavel: e um pedido invalido, nao um sucesso parcial.
+        if (created.isEmpty()) {
+            return Response.status(Response.Status.BAD_REQUEST)
+                    .entity(new BulkTransactionResponse(created, errors))
+                    .build();
+        }
+
+        int status = errors.isEmpty() ? Response.Status.CREATED.getStatusCode() : 207;
+        return Response.status(status)
+                .entity(new BulkTransactionResponse(created, errors))
+                .build();
+    }
+
+    /** Monta e persiste um lancamento do usuario corrente. */
+    private Transaction persist(CreateTransactionRequest request, Category category) {
         Transaction transaction = new Transaction();
         transaction.userId = userContext.userId();
         transaction.category = category;
@@ -78,10 +142,7 @@ public class TransactionResource {
                 : request.source();
         repository.persist(transaction);
         repository.flush();
-
-        return Response.created(URI.create("/api/v1/transactions/" + transaction.id))
-                .entity(TransactionDto.from(transaction))
-                .build();
+        return transaction;
     }
 
     @DELETE

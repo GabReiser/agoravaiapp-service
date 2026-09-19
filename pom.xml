@@ -55,6 +55,16 @@
             <artifactId>quarkus-flyway</artifactId>
         </dependency>
 
+        <!-- Seguranca: validacao local do ID token do Firebase.
+             Firebase nao publica discovery document OIDC, e o JWKS fica em outro
+             host que o issuer, por isso smallrye-jwt (que aceita URL absoluta
+             em mp.jwt.verify.publickey.location) e nao quarkus-oidc, cujo
+             jwks-path precisa ser relativo ao auth-server-url. -->
+        <dependency>
+            <groupId>io.quarkus</groupId>
+            <artifactId>quarkus-smallrye-jwt</artifactId>
+        </dependency>
+
         <!-- Validação (Bean Validation) -->
         <dependency>
             <groupId>io.quarkus</groupId>
