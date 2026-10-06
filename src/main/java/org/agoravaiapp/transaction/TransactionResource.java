@@ -23,6 +23,7 @@ import java.util.UUID;
 import java.util.stream.Collectors;
 import org.agoravaiapp.category.Category;
 import org.agoravaiapp.category.CategoryRepository;
+import org.agoravaiapp.outbox.OutboxEvent;
 import org.agoravaiapp.common.Dates;
 import org.agoravaiapp.common.PageResponse;
 import org.agoravaiapp.common.UserContext;
@@ -128,7 +129,20 @@ public class TransactionResource {
                 .build();
     }
 
-    /** Monta e persiste um lancamento do usuario corrente. */
+    /**
+     * Monta e persiste um lancamento do usuario corrente, publicando o evento de
+     * dominio na <strong>mesma transacao</strong>.
+     *
+     * <p>Gravar o evento aqui, e nao depois do commit, e o ponto inteiro do
+     * outbox: ou o lancamento e o evento existem juntos, ou nenhum dos dois. Uma
+     * chamada HTTP para a gamificacao apos o commit teria uma janela em que o
+     * lancamento foi salvo e o XP se perdeu para sempre -- e o usuario veria a
+     * transacao na lista sem o XP correspondente, sem forma de reconciliar.</p>
+     *
+     * <p>O evento carrega apenas quem, qual lancamento e em que dia. Nunca o
+     * valor: a gamificacao pontua comportamento, e um evento nao deve levar o que
+     * o consumidor nao pode usar.</p>
+     */
     private Transaction persist(CreateTransactionRequest request, Category category) {
         Transaction transaction = new Transaction();
         transaction.userId = userContext.userId();
@@ -142,6 +156,13 @@ public class TransactionResource {
                 : request.source();
         repository.persist(transaction);
         repository.flush();
+
+        OutboxEvent.transactionCreated(
+                transaction.userId,
+                transaction.id.toString(),
+                transaction.date
+        ).persist();
+
         return transaction;
     }
 
